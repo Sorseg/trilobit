@@ -1,0 +1,15 @@
+[package]
+name = "trilobit"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+glam = "0.28.0"
+bevy = { version = "0.14.0", optional = true }
+# FIXME: verify this is used
+itertools = "0.13.0"
+
+[features]
+
+# Exposes main function that visualizes decomposition process using bevy
+vis = ["dep:bevy"]
