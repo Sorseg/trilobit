@@ -11,9 +11,22 @@ use glam::Vec3;
 
 pub type TriangleIndices = [usize; 3];
 
+struct Face {
+    indices: TriangleIndices,
+    conflicts: Vec<usize>,
+}
+impl Face {
+    fn new(indices: [usize; 3]) -> Self {
+        Self {
+            indices,
+            conflicts: Vec::with_capacity(16),
+        }
+    }
+}
+
 struct Hull<'p> {
     points: &'p [Vec3],
-    faces: Vec<TriangleIndices>,
+    faces: Vec<Face>,
 }
 
 impl<'p> Hull<'p> {
@@ -80,7 +93,7 @@ impl<'p> Hull<'p> {
             })
             .expect("Constructor should have checked that there is no less than 4 points in the initial set");
 
-        let face = [furthest_pair.0, furthest_pair.1, furthest_from_the_line];
+        let mut face = [furthest_pair.0, furthest_pair.1, furthest_from_the_line];
 
         // # find furthest point from the face
 
@@ -98,11 +111,20 @@ impl<'p> Hull<'p> {
             .unwrap();
 
         // # build initial tetrahedron
-        // FIXME: is point order within face important?
-        self.faces.push(face);
-        self.faces.push([face[0], furthest_from_the_face, face[1]]);
-        self.faces.push([face[1], furthest_from_the_face, face[2]]);
-        self.faces.push([face[2], furthest_from_the_face, face[0]]);
+
+        if is_point_in_front_of_plane(
+            self.points[furthest_from_the_face],
+            face.map(|p| self.points[p]),
+        ) {
+            face.swap(0, 2);
+        }
+        self.faces.push(Face::new(face));
+        self.faces
+            .push(Face::new([face[0], furthest_from_the_face, face[1]]));
+        self.faces
+            .push(Face::new([face[1], furthest_from_the_face, face[2]]));
+        self.faces
+            .push(Face::new([face[2], furthest_from_the_face, face[0]]));
     }
 
     fn process_next_conflict(&mut self) -> bool {
@@ -114,9 +136,13 @@ impl<'p> Hull<'p> {
     }
 
     fn fill_conflicts(&mut self) {
-        for point in self.points {
-            // find the corresponding face
-            // put the point into the face
+        for face in &mut self.faces {
+            let face_plane = face.indices.map(|p| self.points[p]);
+            for i in 0..self.points.len() {
+                if is_point_in_front_of_plane(self.points[i], face_plane) {
+                    face.conflicts.push(i);
+                }
+            }
         }
     }
 }
@@ -147,4 +173,10 @@ fn point_to_plane_distance(p: Vec3, face: [Vec3; 3]) -> f32 {
     let t = normal.dot(face[0]) - normal.dot(p);
     let p0 = p + t * normal;
     (p - p0).length()
+}
+
+// FIXME: robustness
+fn is_point_in_front_of_plane(p: Vec3, plane: [Vec3; 3]) -> bool {
+    let normal = (plane[0] - plane[1]).cross(plane[0] - plane[2]);
+    normal.dot(plane[0] - p) > 0.0
 }
